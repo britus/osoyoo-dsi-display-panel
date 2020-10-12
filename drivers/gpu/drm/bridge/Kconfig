@@ -1,0 +1,11 @@
+config DRM_BRIDGE_TOSHIBA_TC358762
+    tristate "Toshiba TC358762 DSI to DP bridge chip"
+    depends on OF && I2C
+    depends on BACKLIGHT_CLASS_DEVICE
+    select VIDEOMODE_HELPERS
+    help
+      Say Y here if you want to enable support for Toshiba TC358762 
+	  DSI to display port bridge chip. Known to OSOOYO 7" inch 
+	  800x480 DSI display panel or similar Raspberry PI compatible 
+	  MIPI-DSI display panels.
+      To compile this driver as a module, choose M here.

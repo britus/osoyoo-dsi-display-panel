@@ -1,0 +1,1 @@
+obj-$(CONFIG_DRM_BRIDGE_TOSHIBA_TC358762) += bridge-toshiba-tc358762.o
