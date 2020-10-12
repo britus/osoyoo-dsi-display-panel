@@ -1,0 +1,118 @@
+Here to working overlay for the OSOYOO 7" inch 800x480 display panel for Radxa RockPI-4
+kernel 4.4.x:
+
+/dts-v1/;
+/plugin/;
+
+/ {
+	model = "ROCK PI 4C";
+	compatible = "rockchip,rockpi","rockchip,rk3399";
+
+	/* ------------------------------------------------------------------------------
+	 * OSOYOO display using the Focal FT5406 capacitive touch panel controller.
+	 * The backlight controller is at I2C address 0x45
+	 * The capacitive touch panel controller is at I2C address 0x38
+	 * Both controller connted to i2c1 port
+	 * https://datasheetspdf.com/datasheet/FT5406.html
+	 * Note:
+	 *  The driver 'rockpi_ft5406' must be changed like my fix for the Tinkerboard-S
+	 *  in the Kernel 4.4.136
+	 * ------------------------------------------------------------------------------ */
+	fragment@0 {
+		target = <&i2c1>;
+
+		__overlay__ {
+			rockpi_mcu: rockpi_mcu@45 {
+			    compatible ="rockpi_mcu";
+				status = "okay";
+			};
+
+			rockpi_ft5406: rockpi_ft5406@38 {
+			    compatible ="rockpi_ft5406";
+				status = "okay";
+			};
+		};
+	};
+
+	/* ------------------------------------------------------------------------------
+	 * MIPI DSI entry must be enabled for dual channel ?
+	 * ------------------------------------------------------------------------------ */
+	fragment@1 {
+		target = <&dsi>;
+
+		__overlay__ {
+			status = "ok";
+		};
+	};
+
+	/* ------------------------------------------------------------------------------
+	 * OSOYOO display using Toshiba TC358762 display
+	 * interface bridge chip:
+	 * https://www.alldatasheetde.com/datasheet-pdf/pdf/470149/TOSHIBA/TC358762.html
+	 * ------------------------------------------------------------------------------ */
+	fragment@2 {
+		target = <&dsi1>;
+
+		__overlay__ {
+			rockchip,dual-channel = <&dsi>;
+			status = "okay";
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			panel: panel@0 {
+				compatible ="rockpi,tc358762";
+				reg = <0>;
+				status = "okay";
+			};
+		};
+	};
+
+	/* ------------------------------------------------------------------------------
+	 * Routing
+	 * -> no routing defined, therefore disabled
+	 * ------------------------------------------------------------------------------ */
+	fragment@3 {
+		target = <&route_dsi>;
+
+		__overlay__ {
+			status = "disabled";
+		};
+	};
+
+	/* ------------------------------------------------------------------------------
+	 * Routing
+	 * -> connected to dsi1_in_vopl
+	 * ------------------------------------------------------------------------------ */
+	fragment@4 {
+		target = <&route_dsi1>;
+
+		__overlay__ {
+			status = "okay";
+		};
+	};
+
+	/* ------------------------------------------------------------------------------
+	 * VOPB entry
+	 * -> NOT connected
+	 * ------------------------------------------------------------------------------ */
+	fragment@5 {
+		target = <&dsi1_in_vopb>;
+
+		__overlay__ {
+			status = "disabled";
+		};
+	};
+
+	/* ------------------------------------------------------------------------------
+	 * VOPL entry
+	 * -> connected to route_dsi1
+	 * ------------------------------------------------------------------------------ */
+	fragment@6 {
+		target = <&dsi1_in_vopl>;
+
+		__overlay__ {
+			status = "okay";
+		};
+	};
+};
+
