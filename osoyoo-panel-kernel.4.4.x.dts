@@ -1,6 +1,3 @@
-Here to working overlay for the OSOYOO 7" inch 800x480 display panel for Radxa RockPI-4
-kernel 4.4.x:
-
 /dts-v1/;
 /plugin/;
 
