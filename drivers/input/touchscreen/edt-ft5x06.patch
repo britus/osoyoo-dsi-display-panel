@@ -1,269 +1,95 @@
-diff --git a/edt-ft5x06.c b/edt-ft5x06-osoyoo.c
-index 0b0f8c1..97c1b09 100644
---- a/edt-ft5x06.c
-+++ b/edt-ft5x06-osoyoo.c
-@@ -40,6 +40,8 @@
- #include <linux/input/touchscreen.h>
- #include <linux/of_device.h>
- 
-+/*#define EDT_FT5x06_DEBUG*/
-+
- #define WORK_REGISTER_THRESHOLD		0x00
- #define WORK_REGISTER_REPORT_RATE	0x08
- #define WORK_REGISTER_GAIN		0x30
-@@ -89,6 +91,7 @@ struct edt_ft5x06_ts_data {
- 	u16 num_x;
- 	u16 num_y;
- 
-+	struct work_struct worker;
- 	struct gpio_desc *reset_gpio;
- 	struct gpio_desc *wake_gpio;
- 
-@@ -110,6 +113,8 @@ struct edt_ft5x06_ts_data {
+From 80aa4f08897170aded6b9caa2f44599c3f23483b Mon Sep 17 00:00:00 2001
+From: "B. Eschrich (IS4IT GmbH)" <bjoern.eschrich@is4it.de>
+Date: Mon, 12 Oct 2020 19:25:11 +0200
+Subject: [PATCH] Adding polling mode to touchscreen driver edt-ft5x06
+
+Signed-off-by: B. Eschrich (IS4IT GmbH) <bjoern.eschrich@is4it.de>
+---
+ drivers/input/touchscreen/edt-ft5x06.c | 36 +++++++++++++++++++++++---
+ 1 file changed, 33 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/input/touchscreen/edt-ft5x06.c b/drivers/input/touchscreen/edt-ft5x06.c
+index 3a4f18d34..877923398 100644
+--- a/drivers/input/touchscreen/edt-ft5x06.c
++++ b/drivers/input/touchscreen/edt-ft5x06.c
+@@ -126,6 +126,9 @@ struct edt_ft5x06_ts_data {
  
  	struct edt_reg_addr reg_addr;
  	enum edt_ver version;
 +
++	struct work_struct worker;
 +	u8 irq_capability_enabled;
  };
  
  struct edt_i2c_chip_data {
-@@ -167,7 +172,7 @@ static bool edt_ft5x06_ts_check_crc(struct edt_ft5x06_ts_data *tsdata,
- 	return true;
- }
- 
--static irqreturn_t edt_ft5x06_ts_isr(int irq, void *dev_id)
-+static irqreturn_t edt_ft5x06_ts_isr(int _irq_, void *dev_id)
- {
- 	struct edt_ft5x06_ts_data *tsdata = dev_id;
- 	struct device *dev = &tsdata->client->dev;
-@@ -203,8 +208,11 @@ static irqreturn_t edt_ft5x06_ts_isr(int irq, void *dev_id)
+@@ -222,8 +225,10 @@ static irqreturn_t edt_ft5x06_ts_isr(int irq, void *dev_id)
  					sizeof(cmd), &cmd,
  					datalen, rdbuf);
  	if (error) {
 -		dev_err_ratelimited(dev, "Unable to fetch data, error: %d\n",
-+		/* DO NOT SPAM KERNEL LOG! if polling mode */
+-				    error);
++        /* be quiet in polling mode. what doesn't work - doesn't work! */
 +		if (tsdata->irq_capability_enabled) {
-+			dev_err_ratelimited(dev, "Unable to fetch data, error: %d\n",
- 				    error);
++ 			dev_err_ratelimited(dev, "Unable to fetch data, error: %d\n", error);
 +		}
  		goto out;
  	}
  
-@@ -800,7 +808,8 @@ static int edt_ft5x06_ts_identify(struct i2c_client *client,
- 		if (error)
- 			return error;
- 
--		strlcpy(fw_version, rdbuf, 2);
-+		snprintf(fw_version, EDT_NAME_LEN-1,
-+		         "%02d.%02d", rdbuf[0], rdbuf[1]);
- 
- 		error = edt_ft5x06_ts_readwrite(client, 1, "\xA8",
- 						1, rdbuf);
-@@ -822,16 +831,22 @@ static void edt_ft5x06_ts_get_defaults(struct device *dev,
- 	int error;
- 
- 	error = device_property_read_u32(dev, "threshold", &val);
--	if (!error)
--		reg_addr->reg_threshold = val;
-+	if (!error) {
-+		edt_ft5x06_register_write(tsdata, reg_addr->reg_threshold, val);
-+		tsdata->threshold = val;
-+	}
- 
- 	error = device_property_read_u32(dev, "gain", &val);
--	if (!error)
--		reg_addr->reg_gain = val;
-+	if (!error) {
-+		edt_ft5x06_register_write(tsdata, reg_addr->reg_gain, val);
-+		tsdata->gain = val;
-+	}
- 
- 	error = device_property_read_u32(dev, "offset", &val);
--	if (!error)
--		reg_addr->reg_offset = val;
-+	if (!error) {
-+		edt_ft5x06_register_write(tsdata, reg_addr->reg_offset, val);
-+		tsdata->offset = val;
-+	}
+@@ -1069,6 +1074,18 @@ static void edt_ft5x06_disable_regulator(void *arg)
+ 	regulator_disable(data->vcc);
  }
  
- static void
-@@ -875,17 +890,28 @@ edt_ft5x06_ts_set_regs(struct edt_ft5x06_ts_data *tsdata)
- 	}
- }
- 
-+/* polling 60 fps */
++/* The worker task proc for polling mode with round about 60 fps
++ * but depends on hardware capability */
 +static void edt_ft5x06_worker_proc(struct work_struct *work)
 +{
-+    struct edt_ft5x06_ts_data *tsdata = container_of(work, struct edt_ft5x06_ts_data, worker);
-+    while(1) {
-+        edt_ft5x06_ts_isr(0, tsdata);
-+        msleep_interruptible(17);
-+    }
++	struct edt_ft5x06_ts_data *tsdata = container_of(
++					work, struct edt_ft5x06_ts_data, worker);
++	while(1) {
++		edt_ft5x06_ts_isr(0, tsdata);
++		msleep_interruptible(17);
++	}
 +}
 +
  static int edt_ft5x06_ts_probe(struct i2c_client *client,
  					 const struct i2c_device_id *id)
  {
- 	const struct edt_i2c_chip_data *chip_data;
- 	struct edt_ft5x06_ts_data *tsdata;
-+	u8 buf[2] = { 0xfc, 0x00 };
- 	struct input_dev *input;
--	unsigned long irq_flags;
- 	int error;
- 	char fw_version[EDT_NAME_LEN];
-+    unsigned long irq_flags;
+@@ -1222,6 +1239,9 @@ static int edt_ft5x06_ts_probe(struct i2c_client *client,
  
--	dev_dbg(&client->dev, "probing for EDT FT5x06 I2C\n");
-+	dev_info(&client->dev, "probing for EDT FT5x06 I2C\n");
- 
- 	tsdata = devm_kzalloc(&client->dev, sizeof(*tsdata), GFP_KERNEL);
- 	if (!tsdata) {
-@@ -900,7 +926,6 @@ static int edt_ft5x06_ts_probe(struct i2c_client *client,
- 		dev_err(&client->dev, "invalid or missing chip data\n");
- 		return -EINVAL;
- 	}
--
- 	tsdata->max_support_points = chip_data->max_support_points;
- 
- 	tsdata->reset_gpio = devm_gpiod_get_optional(&client->dev,
-@@ -949,11 +974,17 @@ static int edt_ft5x06_ts_probe(struct i2c_client *client,
- 		return error;
- 	}
- 
-+	/*
-+	 * Dummy read access. EP0700MLP1 returns bogus data on the first
-+	 * register read access and ignores writes.
-+	 */
-+	edt_ft5x06_ts_readwrite(tsdata->client, 2, buf, 2, buf);
-+
- 	edt_ft5x06_ts_set_regs(tsdata);
- 	edt_ft5x06_ts_get_defaults(&client->dev, tsdata);
- 	edt_ft5x06_ts_get_parameters(tsdata);
- 
--	dev_dbg(&client->dev,
-+	dev_info(&client->dev,
- 		"Model \"%s\", Rev. \"%s\", %dx%d sensors\n",
- 		tsdata->name, fw_version, tsdata->num_x, tsdata->num_y);
- 
-@@ -978,19 +1009,28 @@ static int edt_ft5x06_ts_probe(struct i2c_client *client,
- 	input_set_drvdata(input, tsdata);
  	i2c_set_clientdata(client, tsdata);
  
-+	dev_info(&client->dev, "probing IRQ capability...\n");
-+
++	/* Assume that IRQ will work on SBC */
 +	tsdata->irq_capability_enabled = 1;
++
  	irq_flags = irq_get_trigger_type(client->irq);
  	if (irq_flags == IRQF_TRIGGER_NONE)
  		irq_flags = IRQF_TRIGGER_FALLING;
- 	irq_flags |= IRQF_ONESHOT;
-+	irq_flags |= IRQF_SHARED;
-+
-+	dev_info(&client->dev, "irq_flags=0x%lx client->irq=%d client->name=%s",
-+	         irq_flags, client->irq, client->name);
- 
- 	error = devm_request_threaded_irq(&client->dev, client->irq,
- 					NULL, edt_ft5x06_ts_isr, irq_flags,
+@@ -1232,7 +1252,9 @@ static int edt_ft5x06_ts_probe(struct i2c_client *client,
  					client->name, tsdata);
  	if (error) {
--		dev_err(&client->dev, "Unable to request touchscreen IRQ.\n");
+ 		dev_err(&client->dev, "Unable to request touchscreen IRQ.\n");
 -		return error;
-+		dev_err(&client->dev, "Unable to request touchscreen IRQ. Fallback to worker task with 60fps\n");
-+		/* don't stop here: fallback to worker task
-+		 * return error;*/
++		/* Don't stop me now: here we switch to polling mode later */
 +		tsdata->irq_capability_enabled = 0;
++		/*return error;*/
  	}
--
-+	
- 	error = sysfs_create_group(&client->dev.kobj, &edt_ft5x06_attr_group);
- 	if (error)
- 		return error;
-@@ -1000,14 +1040,23 @@ static int edt_ft5x06_ts_probe(struct i2c_client *client,
- 		goto err_remove_attrs;
  
- 	edt_ft5x06_ts_prepare_debugfs(tsdata, dev_driver_string(&client->dev));
--	device_init_wakeup(&client->dev, 1);
- 
-+	device_init_wakeup(&client->dev, 1);
-+	
- 	dev_dbg(&client->dev,
--		"EDT FT5x06 initialized: IRQ %d, WAKE pin %d, Reset pin %d.\n",
--		client->irq,
-+		"EDT FT5x06 initialized: %s %d, WAKE pin %d, Reset pin %d.\n",
-+		tsdata->irq_capability_enabled ? "IRQ" : "TASK timer",
-+		tsdata->irq_capability_enabled ? client->irq : 17,
+ 	error = devm_device_add_group(&client->dev, &edt_ft5x06_attr_group);
+@@ -1251,6 +1273,14 @@ static int edt_ft5x06_ts_probe(struct i2c_client *client,
  		tsdata->wake_gpio ? desc_to_gpio(tsdata->wake_gpio) : -1,
  		tsdata->reset_gpio ? desc_to_gpio(tsdata->reset_gpio) : -1);
  
-+	/* fallback to scheduled task which polls the controller */
++	/* Fallback to scheduled task which polls the controller */
 +	if (!tsdata->irq_capability_enabled) {
-+		dev_info(&client->dev, "Note: EDT_FT5x06 touchscreen driver using worker task instead of IRQ!\n");
-+    	INIT_WORK(&tsdata->worker, edt_ft5x06_worker_proc);
-+    	schedule_work(&tsdata->worker);
++		dev_info(&client->dev, 
++			"Note: EDT_FT5x06 touchscreen driver using worker task instead of IRQ!\n");
++		INIT_WORK(&tsdata->worker, edt_ft5x06_worker_proc);
++		schedule_work(&tsdata->worker);
 +	}
 +
  	return 0;
+ }
  
- err_remove_attrs:
-@@ -1019,6 +1068,7 @@ static int edt_ft5x06_ts_remove(struct i2c_client *client)
- {
- 	struct edt_ft5x06_ts_data *tsdata = i2c_get_clientdata(client);
- 
-+	cancel_work_sync(&tsdata->worker);
- 	edt_ft5x06_ts_teardown_debugfs(tsdata);
- 	sysfs_remove_group(&client->dev.kobj, &edt_ft5x06_attr_group);
- 
-@@ -1049,27 +1099,37 @@ static SIMPLE_DEV_PM_OPS(edt_ft5x06_ts_pm_ops,
- 			 edt_ft5x06_ts_suspend, edt_ft5x06_ts_resume);
- 
- static const struct edt_i2c_chip_data edt_ft5x06_data = {
--	.max_support_points = 5,
-+    .max_support_points = 5,
- };
- 
- static const struct edt_i2c_chip_data edt_ft5506_data = {
--	.max_support_points = 10,
-+    .max_support_points = 10,
-+};
-+
-+static const struct edt_i2c_chip_data edt_ft6236_data = {
-+    .max_support_points = 2,
- };
- 
- static const struct i2c_device_id edt_ft5x06_ts_id[] = {
--	{ .name = "edt-ft5x06", .driver_data = (long)&edt_ft5x06_data },
--	{ .name = "edt-ft5506", .driver_data = (long)&edt_ft5506_data },
--	{ /* sentinel */ }
-+    { .name = "edt-ft5x06", .driver_data = (long)&edt_ft5x06_data },
-+    { .name = "edt-ft5506", .driver_data = (long)&edt_ft5506_data },
-+    { .name = "ev-ft5726", .driver_data = (long)&edt_ft5506_data },
-+    /* Note no edt- prefix for compatibility with the ft6236.c driver */
-+    { .name = "ft6236", .driver_data = (long)&edt_ft6236_data },
-+    { /* sentinel */ }
- };
- MODULE_DEVICE_TABLE(i2c, edt_ft5x06_ts_id);
- 
- #ifdef CONFIG_OF
- static const struct of_device_id edt_ft5x06_of_match[] = {
--	{ .compatible = "edt,edt-ft5206", .data = &edt_ft5x06_data },
--	{ .compatible = "edt,edt-ft5306", .data = &edt_ft5x06_data },
--	{ .compatible = "edt,edt-ft5406", .data = &edt_ft5x06_data },
--	{ .compatible = "edt,edt-ft5506", .data = &edt_ft5506_data },
--	{ /* sentinel */ }
-+    { .compatible = "edt,edt-ft5206", .data = &edt_ft5x06_data },
-+    { .compatible = "edt,edt-ft5306", .data = &edt_ft5x06_data },
-+    { .compatible = "edt,edt-ft5406", .data = &edt_ft5x06_data },
-+    { .compatible = "edt,edt-ft5506", .data = &edt_ft5506_data },
-+    { .compatible = "evervision,ev-ft5726", .data = &edt_ft5506_data },
-+    /* Note focaltech vendor prefix for compatibility with ft6236.c */
-+    { .compatible = "focaltech,ft6236", .data = &edt_ft6236_data },
-+    { /* sentinel */ }
- };
- MODULE_DEVICE_TABLE(of, edt_ft5x06_of_match);
- #endif
-@@ -1090,3 +1150,4 @@ module_i2c_driver(edt_ft5x06_ts_driver);
- MODULE_AUTHOR("Simon Budig <simon.budig@kernelconcepts.de>");
- MODULE_DESCRIPTION("EDT FT5x06 I2C Touchscreen Driver");
- MODULE_LICENSE("GPL");
-+
+-- 
+Created with Armbian build tools https://github.com/armbian/build
+

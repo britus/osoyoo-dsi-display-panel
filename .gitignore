@@ -1,3 +1,6 @@
+*.dtbo
+*.dtb
+
 # Prerequisites
 *.d
 

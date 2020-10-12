@@ -19,13 +19,15 @@
 		target = <&i2c1>;
 
 		__overlay__ {
+			/* No in mainline kernel!
 			rockpi_mcu: rockpi_mcu@45 {
 			    compatible ="rockpi_mcu";
 				status = "okay";
 			};
+			*/
 
 			rockpi_ft5406: rockpi_ft5406@38 {
-			    compatible ="rockpi_ft5406";
+			    compatible ="edt,edt-ft5406";
 				status = "okay";
 			};
 		};
@@ -35,7 +37,7 @@
 	 * MIPI DSI entry must be enabled for dual channel ?
 	 * ------------------------------------------------------------------------------ */
 	fragment@1 {
-		target = <&dsi>;
+		target = <&mipi_dsi>;
 
 		__overlay__ {
 			status = "ok";
@@ -48,17 +50,17 @@
 	 * https://www.alldatasheetde.com/datasheet-pdf/pdf/470149/TOSHIBA/TC358762.html
 	 * ------------------------------------------------------------------------------ */
 	fragment@2 {
-		target = <&dsi1>;
+		target = <&mipi_dsi1>;
 
 		__overlay__ {
-			rockchip,dual-channel = <&dsi>;
+			rockchip,dual-channel = <&mipi_dsi>;
 			status = "okay";
 			#address-cells = <1>;
 			#size-cells = <0>;
 
 			panel: panel@0 {
-				compatible ="rockpi,tc358762";
-				reg = <0>;
+				compatible ="raspberrypi,7inch-touchscreen-panel";
+				reg = <45>;
 				status = "okay";
 			};
 		};
@@ -68,6 +70,7 @@
 	 * Routing
 	 * -> no routing defined, therefore disabled
 	 * ------------------------------------------------------------------------------ */
+	/* Not in Armbian mainline kernel
 	fragment@3 {
 		target = <&route_dsi>;
 
@@ -75,11 +78,13 @@
 			status = "disabled";
 		};
 	};
+    */
 
 	/* ------------------------------------------------------------------------------
 	 * Routing
 	 * -> connected to dsi1_in_vopl
 	 * ------------------------------------------------------------------------------ */
+	/* Not in Armbian mainline kernel
 	fragment@4 {
 		target = <&route_dsi1>;
 
@@ -87,11 +92,13 @@
 			status = "okay";
 		};
 	};
+    */
 
 	/* ------------------------------------------------------------------------------
 	 * VOPB entry
 	 * -> NOT connected
 	 * ------------------------------------------------------------------------------ */
+	/* Not in Armbian mainline kernel
 	fragment@5 {
 		target = <&dsi1_in_vopb>;
 
@@ -99,11 +106,13 @@
 			status = "disabled";
 		};
 	};
+    */
 
 	/* ------------------------------------------------------------------------------
 	 * VOPL entry
 	 * -> connected to route_dsi1
 	 * ------------------------------------------------------------------------------ */
+	/* Not in Armbian mainline kernel
 	fragment@6 {
 		target = <&dsi1_in_vopl>;
 
@@ -111,5 +120,6 @@
 			status = "okay";
 		};
 	};
+	*/
 };
 

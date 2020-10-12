@@ -28,14 +28,37 @@
 #include <linux/platform_device.h>
 #include <linux/regulator/consumer.h>
 
+/* old includes
 #include <drm/drmP.h>
 #include <drm/drm_crtc.h>
 #include <drm/drm_mipi_dsi.h>
 #include <drm/drm_panel.h>
+*/
 
 #include <video/display_timing.h>
 #include <video/of_display_timing.h>
 #include <video/videomode.h>
+
+/* ================================================ */
+
+#include <linux/delay.h>
+#include <linux/gpio/consumer.h>
+#include <linux/module.h>
+#include <linux/of_graph.h>
+#include <linux/regulator/consumer.h>
+
+#include <video/mipi_display.h>
+
+#include <drm/drm_atomic_helper.h>
+#include <drm/drm_bridge.h>
+#include <drm/drm_crtc.h>
+#include <drm/drm_fb_helper.h>
+#include <drm/drm_mipi_dsi.h>
+#include <drm/drm_of.h>
+#include <drm/drm_panel.h>
+#include <drm/drm_print.h>
+#include <drm/drm_probe_helper.h>
+
 
 int trigger_bridge = 1;
 
@@ -96,7 +119,7 @@ struct tc358762 {
 static int tc358762_set_brightness(struct drm_panel *panel, int brightness)
 {
 	struct device *dev = panel->dev;
-	
+
 	dev_info(dev, "Board MCU: [TODO] set backlight brightness to %d\n", brightness);
 
 	return 0;
@@ -319,7 +342,7 @@ static int tc358762_prepare(struct drm_panel *panel)
 static int tc358762_enable(struct drm_panel *panel)
 {
 	struct tc358762 *p = to_tc358762(panel);
-	
+
 	/* TODO: use custom OF property ! */
 	int dflt_brightness = 165;
 
@@ -541,8 +564,7 @@ static const struct bridge_desc tc358762_bridge = {
 
 static const struct of_device_id dsi_of_match[] = {
 	{
-		.compatible = "rockpi,tc358762",
-		.compatible = "osooyo,tc358762",
+		.compatible = "toshiba,tc358762",
 		.data = &tc358762_bridge
 	}, {
 		/* sentinel */
