@@ -11,9 +11,6 @@
 	 * The capacitive touch panel controller is at I2C address 0x38
 	 * Both controller connted to i2c1 port
 	 * https://datasheetspdf.com/datasheet/FT5406.html
-	 * Note:
-	 *  The driver 'rockpi_ft5406' must be changed like my fix for the Tinkerboard-S
-	 *  in the Kernel 4.4.136
 	 * ------------------------------------------------------------------------------ */
 	fragment@0 {
 		target = <&i2c1>;
