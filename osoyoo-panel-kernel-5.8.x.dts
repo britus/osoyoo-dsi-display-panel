@@ -1,125 +1,166 @@
 /dts-v1/;
 /plugin/;
 
+#include <dt-bindings/clock/rk3399-cru.h>
+#include <dt-bindings/gpio/gpio.h>
+
 / {
 	model = "ROCK PI 4C";
 	compatible = "rockchip,rockpi","rockchip,rk3399";
 
-	/* ------------------------------------------------------------------------------
-	 * OSOYOO display using the Focal FT5406 capacitive touch panel controller.
-	 * The backlight controller is at I2C address 0x45
-	 * The capacitive touch panel controller is at I2C address 0x38
-	 * Both controller connted to i2c1 port
-	 * https://datasheetspdf.com/datasheet/FT5406.html
-	 * Note:
-	 *  The driver 'rockpi_ft5406' must be changed like my fix for the Tinkerboard-S
-	 *  in the Kernel 4.4.136
-	 * ------------------------------------------------------------------------------ */
+	/* --------------------------------------------------
+	 * OSOYOO display using the Focal FT5406 capacitive
+	 * touch controller, the Toshiba TC358762 DSI to DPI
+	 * bridge and a I2C panel controller. The capacitive
+	 * touch controller is at I2C address 0x38. The panel
+	 * controller is at I2C address 0x45.
+	 * Both controller connected to i2c1 port
+	 * -------------------------------------------------- */
+
 	fragment@0 {
 		target = <&i2c1>;
 
 		__overlay__ {
-			/* No in mainline kernel!
-			rockpi_mcu: rockpi_mcu@45 {
-			    compatible ="rockpi_mcu";
+		    #address-cells = <1>;
+			#size-cells = <0>;
+
+			osoyoo_touch@38 {
+			    compatible ="edt,edt-ft5406";
+			    #address-cells = <1>;
+				#size-cells = <0>;
+			    vcc-supply = <&vcc_3v0>;
+			    reg = <0x38>;
 				status = "okay";
 			};
-			*/
 
-			rockpi_ft5406: rockpi_ft5406@38 {
-			    compatible ="edt,edt-ft5406";
+			osoyoo_panel@45 {
+				compatible = "osoyoo,osoyoo-panel";
+			    #address-cells = <1>;
+				#size-cells = <0>;
+				reg = <0x45>;
 				status = "okay";
+				panel,bpc = <8>;
+				panel,pwm = <0xff>;
+				panel,width = <217>;
+				panel,height = <136>;
+				panel,timing = <1>;
+				dsi,init = <4>;
+				/*dsi,mode_flags = <0x805>;*/
+				dsi,format = <0>;
+				dsi,lanes = <1>;
+
+				display-timings {
+					native-mode = <&timing1>;
+					timing1: dt-1 {
+						clock-frequency = <40000000>;
+						hactive      = <800>;
+						hfront-porch = <40>;
+						hsync-len    = <128>;
+						hback-porch  = <88>;
+						vactive      = <600>;
+						vfront-porch = <1>;
+						vsync-len    = <4>;
+						vback-porch  = <23>;
+						hsync-active = <0>;
+                        vsync-active = <1>;
+					};
+					timing2: dt-2 {
+						clock-frequency = <65000000>;
+						hactive      = <1024>;
+						hfront-porch = <24>;
+						hsync-len    = <136>;
+						hback-porch  = <160>;
+						vactive      = <768>;
+						vfront-porch = <3>;
+						vsync-len    = <6>;
+						vback-porch  = <29>;
+						hsync-active = <0>;
+                       	vsync-active = <0>;
+					};
+				};
+
+				port {
+					dsi,master = <&panel_in_channel0>;
+					panel_in_channel0: endpoint@0 {
+						remote-endpoint = <&panel_out_dsi0>;
+					};
+					panel_in_channel1: endpoint@1 {
+						remote-endpoint = <&panel_out_dsi1>;
+					};
+				};
 			};
 		};
 	};
 
-	/* ------------------------------------------------------------------------------
-	 * MIPI DSI entry must be enabled for dual channel ?
-	 * ------------------------------------------------------------------------------ */
+	/* --------------------------------------------------
+	 * Enable MIPI DSI (entry must be enabled for dual channel)
+	 * -------------------------------------------------- */
 	fragment@1 {
 		target = <&mipi_dsi>;
 
 		__overlay__ {
-			status = "ok";
-		};
-	};
-
-	/* ------------------------------------------------------------------------------
-	 * OSOYOO display using Toshiba TC358762 display
-	 * interface bridge chip:
-	 * https://www.alldatasheetde.com/datasheet-pdf/pdf/470149/TOSHIBA/TC358762.html
-	 * ------------------------------------------------------------------------------ */
-	fragment@2 {
-		target = <&mipi_dsi1>;
-
-		__overlay__ {
-			rockchip,dual-channel = <&mipi_dsi>;
+            #address-cells = <1>;
+           	#size-cells = <0>;
+			clock-master;
 			status = "okay";
-			#address-cells = <1>;
-			#size-cells = <0>;
 
-			panel: panel@0 {
-				compatible ="raspberrypi,7inch-touchscreen-panel";
-				reg = <45>;
-				status = "okay";
+			ports {
+			    #address-cells = <1>;
+			    #size-cells = <0>;
+
+				mipi_out: port@1 {
+                    reg = <1>;
+
+					panel_out_dsi0: endpoint {
+						remote-endpoint = <&panel_in_channel0>;
+					};
+				};
 			};
 		};
 	};
 
-	/* ------------------------------------------------------------------------------
-	 * Routing
-	 * -> no routing defined, therefore disabled
-	 * ------------------------------------------------------------------------------ */
-	/* Not in Armbian mainline kernel
+	fragment@2 {
+		target = <&mipi_dsi1>;
+
+		__overlay__ {
+       		#address-cells = <1>;
+       		#size-cells = <0>;
+			status = "okay";
+
+			ports {
+			    #address-cells = <1>;
+			    #size-cells = <0>;
+
+				mipi1_out: port@1 {
+                    reg = <1>;
+
+					panel_out_dsi1: endpoint {
+						remote-endpoint = <&panel_in_channel1>;
+					};
+				};
+			};
+		};
+	};
+
+	/* --------------------------------------------------
+	 * Disable HDMI
+	 * -------------------------------------------------- */
+
 	fragment@3 {
-		target = <&route_dsi>;
-
+		target = <&hdmi>;
 		__overlay__ {
 			status = "disabled";
 		};
 	};
-    */
 
-	/* ------------------------------------------------------------------------------
-	 * Routing
-	 * -> connected to dsi1_in_vopl
-	 * ------------------------------------------------------------------------------ */
-	/* Not in Armbian mainline kernel
+	/* --------------------------------------------------
+	 * Disable eDP
+	 * -------------------------------------------------- */
+
 	fragment@4 {
-		target = <&route_dsi1>;
-
-		__overlay__ {
-			status = "okay";
-		};
-	};
-    */
-
-	/* ------------------------------------------------------------------------------
-	 * VOPB entry
-	 * -> NOT connected
-	 * ------------------------------------------------------------------------------ */
-	/* Not in Armbian mainline kernel
-	fragment@5 {
-		target = <&dsi1_in_vopb>;
-
+		target = <&edp>;
 		__overlay__ {
 			status = "disabled";
 		};
 	};
-    */
-
-	/* ------------------------------------------------------------------------------
-	 * VOPL entry
-	 * -> connected to route_dsi1
-	 * ------------------------------------------------------------------------------ */
-	/* Not in Armbian mainline kernel
-	fragment@6 {
-		target = <&dsi1_in_vopl>;
-
-		__overlay__ {
-			status = "okay";
-		};
-	};
-	*/
 };
-
